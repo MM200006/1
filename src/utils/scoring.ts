@@ -120,7 +120,6 @@ export const calculateReputationSnapshot = (
 ): ReputationSnapshot => {
   const accepted = applications.filter((application) => application.status === 'Accepted').length
   const interviews = applications.filter((application) => application.status === 'Interview').length
-  const active = applications.filter((application) => application.status !== 'Rejected').length
 
   const responsiveness = Math.min(100, 55 + applications.length * 8)
   const reliability = Math.min(100, 60 + accepted * 18 + interviews * 8)
