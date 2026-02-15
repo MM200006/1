@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="de" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immobilienmakler Scraper</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+  body{min-height:100vh;margin:0}
+  .sidebar{width:250px;min-height:100vh;background:var(--bs-dark-bg-subtle);border-right:1px solid var(--bs-border-color);flex-shrink:0}
+  .sidebar .nav-link{color:var(--bs-body-color);border-radius:.5rem;margin:2px 8px;padding:.55rem 1rem;cursor:pointer}
+  .sidebar .nav-link:hover,.sidebar .nav-link.active{background:var(--bs-primary);color:#fff}
+  .main{flex:1;min-width:0;overflow-y:auto;max-height:100vh}
+  .page{display:none}.page.active{display:block}
+  .stat-card{border:1px solid var(--bs-border-color);border-radius:1rem;transition:transform .15s}
+  .stat-card:hover{transform:translateY(-2px)}
+  .stars{color:#ffc107}.star-bad{color:#dc3545}
+  .log-box{max-height:280px;overflow-y:auto;font-family:monospace;font-size:.78rem;background:var(--bs-dark);border-radius:.5rem;padding:.8rem}
+  .key-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .key-ok{background:#198754}.key-miss{background:#dc3545}
+  .review-card{border-left:3px solid #dc3545;padding-left:1rem;margin-bottom:1rem}
+  .clickable{cursor:pointer}
+  .truncate{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<div class="d-flex">
+  <!-- Sidebar -->
+  <nav class="sidebar d-flex flex-column p-3">
+    <a class="d-flex align-items-center mb-4 text-decoration-none clickable" onclick="go('dashboard')">
+      <i class="bi bi-buildings fs-3 text-primary me-2"></i>
+      <span class="fs-5 fw-bold">Makler Scraper</span>
+    </a>
+    <ul class="nav flex-column" id="nav">
+      <li class="nav-item"><a class="nav-link" data-page="dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
+      <li class="nav-item"><a class="nav-link" data-page="scrape"><i class="bi bi-search me-2"></i>Neuer Scrape</a></li>
+      <li class="nav-item"><a class="nav-link" data-page="results"><i class="bi bi-table me-2"></i>Ergebnisse</a></li>
+      <li class="nav-item"><a class="nav-link" data-page="settings"><i class="bi bi-gear me-2"></i>API-Keys</a></li>
+      <li class="nav-item mt-2"><a class="nav-link clickable" onclick="exportCSV()"><i class="bi bi-download me-2"></i>CSV Export</a></li>
+    </ul>
+    <div class="mt-auto small text-muted px-2">
+      <hr>
+      <div id="key-status"></div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main p-4">
+
+    <!-- ===================== DASHBOARD ===================== -->
+    <div class="page" id="page-dashboard">
+      <h2 class="mb-4"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
+      <div class="row g-4 mb-4" id="stats-row"></div>
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Letzte Ergebnisse</h5>
+          <a class="btn btn-sm btn-outline-primary clickable" onclick="go('results')">Alle anzeigen</a>
+        </div>
+        <div class="card-body p-0" id="recent-table"></div>
+      </div>
+    </div>
+
+    <!-- ===================== SCRAPE ===================== -->
+    <div class="page" id="page-scrape">
+      <h2 class="mb-4"><i class="bi bi-search me-2"></i>Neuer Scraping-Job</h2>
+      <div id="scrape-keys-status" class="mb-3"></div>
+
+      <!-- Job running -->
+      <div class="card border-primary mb-4 d-none" id="job-panel">
+        <div class="card-header bg-primary text-white">
+          <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2"></div>
+            <strong id="job-title">Job l&auml;uft...</strong>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="fw-bold mb-2" id="job-step"></p>
+          <div class="progress mb-3" style="height:26px">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="job-bar" style="width:0%">
+              <span id="job-bar-text">0 / 0</span>
+            </div>
+          </div>
+          <h6>Log:</h6>
+          <div class="log-box" id="job-log"></div>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div class="card" id="scrape-form-card">
+        <div class="card-header"><h5 class="mb-0">Neuen Scraping-Job starten</h5></div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Suchbegriff</label>
+              <input type="text" class="form-control" id="inp-query" value="Immobilienmakler" placeholder="z.B. Immobilienmakler">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Max. Ergebnisse pro Stadt</label>
+              <input type="number" class="form-control" id="inp-max" value="20" min="1" max="60">
+            </div>
+            <div class="col-12">
+              <label class="form-label">St&auml;dte <small class="text-muted">(kommagetrennt, leer = Top 20)</small></label>
+              <textarea class="form-control" id="inp-cities" rows="2" placeholder="Berlin, Hamburg, M&uuml;nchen, K&ouml;ln..."></textarea>
+            </div>
+          </div>
+          <hr>
+          <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted"><i class="bi bi-info-circle me-1"></i>L&auml;uft im Browser &mdash; Seite nicht schlie&szlig;en.</small>
+            <button class="btn btn-primary btn-lg" id="btn-start" onclick="startScrape()">
+              <i class="bi bi-play-fill me-1"></i>Scraping starten
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline info -->
+      <div class="card mt-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>Pipeline-Schritte</h5></div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <span class="badge bg-primary rounded-pill me-1">1</span>
+              <strong>Google Maps Suche</strong>
+              <p class="text-muted small mb-0">Sucht Makler via Google Places API.</p>
+            </div>
+            <div class="col-md-4">
+              <span class="badge bg-danger rounded-pill me-1">2</span>
+              <strong>1-Stern-Filter</strong>
+              <p class="text-muted small mb-0">Beh&auml;lt nur Firmen mit 1-Stern-Bewertungen.</p>
+            </div>
+            <div class="col-md-4">
+              <span class="badge bg-success rounded-pill me-1">3</span>
+              <strong>KI-Analyse</strong>
+              <p class="text-muted small mb-0">ChatGPT analysiert die Bewertungen.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="alert alert-info mt-3">
+        <i class="bi bi-info-circle me-2"></i>
+        <strong>Hinweis:</strong> Impressum-Daten (CEO, E-Mail) k&ouml;nnen im Browser nicht automatisch gescrapt werden (CORS). Diese Felder kannst du manuell in der Detailansicht erg&auml;nzen.
+      </div>
+    </div>
+
+    <!-- ===================== RESULTS ===================== -->
+    <div class="page" id="page-results">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-table me-2"></i>Ergebnisse</h2>
+        <button class="btn btn-outline-success" onclick="exportCSV()"><i class="bi bi-download me-1"></i>CSV</button>
+      </div>
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-6">
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="filter-search" placeholder="Firmenname oder Stadt..." oninput="renderResults()">
+              </div>
+            </div>
+            <div class="col-md-3">
+              <select class="form-select" id="filter-sort" onchange="renderResults()">
+                <option value="date">Zuletzt hinzugef&uuml;gt</option>
+                <option value="name">Name</option>
+                <option value="rating_asc">Bewertung aufsteigend</option>
+                <option value="rating_desc">Bewertung absteigend</option>
+                <option value="reviews">Anzahl Bewertungen</option>
+              </select>
+            </div>
+            <div class="col-md-3 text-end">
+              <span class="text-muted" id="result-count"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="results-table"></div>
+    </div>
+
+    <!-- ===================== DETAIL ===================== -->
+    <div class="page" id="page-detail">
+      <nav class="mb-3"><ol class="breadcrumb">
+        <li class="breadcrumb-item"><a class="clickable" onclick="go('results')">Ergebnisse</a></li>
+        <li class="breadcrumb-item active" id="detail-crumb"></li>
+      </ol></nav>
+      <div id="detail-content"></div>
+    </div>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <div class="page" id="page-settings">
+      <h2 class="mb-4"><i class="bi bi-gear me-2"></i>API-Keys</h2>
+      <div class="card" style="max-width:600px">
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Google API Key <small class="text-muted">(Places API)</small></label>
+            <input type="password" class="form-control" id="inp-google-key" placeholder="AIza...">
+            <div class="form-text"><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console &rarr; API Key erstellen</a>. Places API aktivieren!</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">OpenAI API Key <small class="text-muted">(ChatGPT)</small></label>
+            <input type="password" class="form-control" id="inp-openai-key" placeholder="sk-...">
+            <div class="form-text"><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI API Key erstellen</a></div>
+          </div>
+          <button class="btn btn-primary" onclick="saveKeys()"><i class="bi bi-check-lg me-1"></i>Speichern</button>
+          <button class="btn btn-outline-secondary ms-2" onclick="toggleKeyVisibility()"><i class="bi bi-eye me-1"></i>Anzeigen</button>
+        </div>
+      </div>
+      <div class="alert alert-warning mt-3" style="max-width:600px">
+        <i class="bi bi-shield-lock me-2"></i>
+        Die Keys werden <strong>nur lokal</strong> in deinem Browser gespeichert (localStorage). Sie werden nie an Dritte gesendet &mdash; nur direkt an Google / OpenAI.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+const DEFAULT_CITIES = [
+  'Berlin','Hamburg','München','Köln','Frankfurt am Main',
+  'Stuttgart','Düsseldorf','Leipzig','Dortmund','Essen',
+  'Bremen','Dresden','Hannover','Nürnberg','Duisburg',
+  'Bochum','Wuppertal','Bielefeld','Bonn','Münster'
+];
+
+let db = JSON.parse(localStorage.getItem('makler_db') || '[]');
+let jobRunning = false;
+let mapsLoaded = false;
+let placesService = null;
+
+function save() { localStorage.setItem('makler_db', JSON.stringify(db)); }
+function getKey(k) { return localStorage.getItem('makler_' + k) || ''; }
+function setKey(k, v) { localStorage.setItem('makler_' + k, v); }
+
+// ═══════════════════════════════════════════════
+//  ROUTER
+// ═══════════════════════════════════════════════
+function go(page, arg) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('#nav .nav-link').forEach(a => {
+    a.classList.toggle('active', a.dataset.page === page);
+  });
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'results') renderResults();
+  if (page === 'settings') renderSettings();
+  if (page === 'scrape') renderScrape();
+  if (page === 'detail') renderDetail(arg);
+}
+
+document.querySelectorAll('#nav .nav-link').forEach(a => {
+  a.addEventListener('click', () => go(a.dataset.page));
+});
+
+// ═══════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════
+function renderSettings() {
+  document.getElementById('inp-google-key').value = getKey('google');
+  document.getElementById('inp-openai-key').value = getKey('openai');
+}
+function saveKeys() {
+  setKey('google', document.getElementById('inp-google-key').value.trim());
+  setKey('openai', document.getElementById('inp-openai-key').value.trim());
+  mapsLoaded = false;
+  placesService = null;
+  updateKeyStatus();
+  alert('Keys gespeichert!');
+}
+function toggleKeyVisibility() {
+  ['inp-google-key','inp-openai-key'].forEach(id => {
+    const el = document.getElementById(id);
+    el.type = el.type === 'password' ? 'text' : 'password';
+  });
+}
+function updateKeyStatus() {
+  const g = !!getKey('google'), o = !!getKey('openai');
+  document.getElementById('key-status').innerHTML =
+    `<span class="key-dot ${g?'key-ok':'key-miss'}"></span> Google &nbsp;
+     <span class="key-dot ${o?'key-ok':'key-miss'}"></span> OpenAI`;
+
+  const el = document.getElementById('scrape-keys-status');
+  if (el) {
+    let h = '';
+    if (g) h += '<span class="badge bg-success me-1"><i class="bi bi-check-circle me-1"></i>Google API</span>';
+    else h += '<span class="badge bg-danger me-1"><i class="bi bi-x-circle me-1"></i>Google API fehlt</span>';
+    if (o) h += '<span class="badge bg-success me-1"><i class="bi bi-check-circle me-1"></i>OpenAI API</span>';
+    else h += '<span class="badge bg-warning text-dark me-1"><i class="bi bi-exclamation-circle me-1"></i>OpenAI fehlt</span>';
+    el.innerHTML = h;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════
+function renderDashboard() {
+  const total = db.length;
+  const withReviews = db.filter(b => b.one_star_reviews && b.one_star_reviews.length).length;
+  const withSite = db.filter(b => b.website).length;
+  const avg = total ? (db.reduce((s,b) => s + (b.rating||0), 0) / total).toFixed(1) : '0';
+
+  document.getElementById('stats-row').innerHTML = [
+    statCard(total, 'Unternehmen gesamt', 'text-primary'),
+    statCard(withReviews, 'Mit 1-Stern-Bewertungen', 'text-danger'),
+    statCard(withSite, 'Mit Website', 'text-success'),
+    statCard(avg, '<i class="bi bi-star-fill stars"></i> Durchschnitt', 'text-warning'),
+  ].join('');
+
+  const recent = db.slice(-10).reverse();
+  if (!recent.length) {
+    document.getElementById('recent-table').innerHTML =
+      '<div class="p-4 text-center text-muted"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Keine Daten. <a class="clickable" onclick="go(\'scrape\')">Jetzt scrapen</a></div>';
+    return;
+  }
+  document.getElementById('recent-table').innerHTML = '<div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Unternehmen</th><th>Bewertung</th><th>1-Stern</th><th></th></tr></thead><tbody>' +
+    recent.map(b => `<tr class="clickable" onclick="go('detail','${b.place_id}')">
+      <td><strong>${esc(b.company_name)}</strong><br><small class="text-muted">${esc((b.address||'').slice(0,50))}</small></td>
+      <td>${starsHtml(b.rating)} <small>(${b.reviews_count||0})</small></td>
+      <td><span class="badge bg-danger">${(b.one_star_reviews||[]).length}</span></td>
+      <td><i class="bi bi-chevron-right"></i></td>
+    </tr>`).join('') + '</tbody></table></div>';
+}
+
+function statCard(val, label, cls) {
+  return `<div class="col-sm-6 col-xl-3"><div class="stat-card p-4 text-center"><div class="fs-1 fw-bold ${cls}">${val}</div><div class="text-muted">${label}</div></div></div>`;
+}
+
+// ═══════════════════════════════════════════════
+//  RESULTS
+// ═══════════════════════════════════════════════
+function renderResults() {
+  const search = (document.getElementById('filter-search').value || '').toLowerCase();
+  const sort = document.getElementById('filter-sort').value;
+
+  let list = db.filter(b => !search ||
+    b.company_name.toLowerCase().includes(search) ||
+    (b.address||'').toLowerCase().includes(search));
+
+  if (sort === 'name') list.sort((a,b) => a.company_name.localeCompare(b.company_name));
+  else if (sort === 'rating_asc') list.sort((a,b) => (a.rating||0) - (b.rating||0));
+  else if (sort === 'rating_desc') list.sort((a,b) => (b.rating||0) - (a.rating||0));
+  else if (sort === 'reviews') list.sort((a,b) => (b.reviews_count||0) - (a.reviews_count||0));
+  else list.reverse(); // date = newest first
+
+  document.getElementById('result-count').textContent = list.length + ' Ergebnis' + (list.length !== 1 ? 'se' : '');
+
+  if (!list.length) {
+    document.getElementById('results-table').innerHTML =
+      '<div class="text-center py-5"><i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i><h5 class="text-muted">Keine Ergebnisse</h5></div>';
+    return;
+  }
+
+  document.getElementById('results-table').innerHTML = '<div class="card"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr>' +
+    '<th>Unternehmen</th><th>Bewertung</th><th>1-Stern</th><th>Telefon</th><th>Website</th><th class="text-end">Aktionen</th></tr></thead><tbody>' +
+    list.map(b => `<tr>
+      <td class="clickable" onclick="go('detail','${b.place_id}')"><strong>${esc(b.company_name)}</strong><br><small class="text-muted">${esc((b.address||'').slice(0,55))}</small></td>
+      <td class="text-nowrap">${starsHtml(b.rating)}<br><small>${b.rating||0} (${b.reviews_count||0})</small></td>
+      <td><span class="badge bg-danger">${(b.one_star_reviews||[]).length}</span></td>
+      <td class="text-nowrap"><small>${esc(b.phone||'—')}</small></td>
+      <td>${b.website ? '<a href="'+esc(b.website)+'" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-up-right"></i></a>' : '—'}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary me-1" onclick="go('detail','${b.place_id}')"><i class="bi bi-eye"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteBiz('${b.place_id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join('') + '</tbody></table></div></div>';
+}
+
+function deleteBiz(pid) {
+  if (!confirm('Eintrag wirklich löschen?')) return;
+  db = db.filter(b => b.place_id !== pid);
+  save();
+  renderResults();
+}
+
+// ═══════════════════════════════════════════════
+//  DETAIL
+// ═══════════════════════════════════════════════
+function renderDetail(placeId) {
+  const b = db.find(x => x.place_id === placeId);
+  if (!b) { go('results'); return; }
+  document.getElementById('detail-crumb').textContent = b.company_name;
+
+  const reviews = b.one_star_reviews || [];
+  document.getElementById('detail-content').innerHTML = `
+    <div class="d-flex justify-content-between align-items-start mb-4">
+      <div>
+        <h2 class="mb-1">${esc(b.company_name)}</h2>
+        <p class="text-muted"><i class="bi bi-geo-alt me-1"></i>${esc(b.address||'Keine Adresse')}</p>
+      </div>
+      <div class="d-flex gap-2">
+        ${b.website ? '<a href="'+esc(b.website)+'" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-globe me-1"></i>Website</a>' : ''}
+        <button class="btn btn-outline-danger" onclick="deleteBiz('${b.place_id}');go('results')"><i class="bi bi-trash me-1"></i>L&ouml;schen</button>
+      </div>
+    </div>
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <!-- Google Maps -->
+        <div class="card mb-4"><div class="card-header"><h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i>Google Maps</h5></div>
+          <div class="card-body"><div class="row g-3">
+            <div class="col-sm-4"><label class="form-label text-muted small">Bewertung</label><div>${starsHtml(b.rating,true)} <span class="ms-1">${b.rating||0} / 5</span></div></div>
+            <div class="col-sm-4"><label class="form-label text-muted small">Bewertungen</label><div class="fs-5">${b.reviews_count||0}</div></div>
+            <div class="col-sm-4"><label class="form-label text-muted small">Telefon</label><div>${b.phone ? '<a href="tel:'+esc(b.phone)+'">'+esc(b.phone)+'</a>' : '—'}</div></div>
+          </div></div>
+        </div>
+        <!-- AI Analysis -->
+        <div class="card mb-4"><div class="card-header"><h5 class="mb-0"><i class="bi bi-robot me-2"></i>KI-Analyse</h5></div>
+          <div class="card-body"><p class="mb-0">${esc(b.ai_analysis||'Keine Analyse vorhanden.')}</p></div>
+        </div>
+        <!-- 1-Star Reviews -->
+        <div class="card mb-4"><div class="card-header d-flex justify-content-between"><h5 class="mb-0"><i class="bi bi-star me-2 text-danger"></i>1-Stern-Bewertungen</h5><span class="badge bg-danger">${reviews.length}</span></div>
+          <div class="card-body">${reviews.length ? reviews.map(r => '<div class="review-card"><p class="mb-0">'+esc(r)+'</p></div>').join('') : '<p class="text-muted mb-0">Keine 1-Stern-Bewertungen.</p>'}</div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <!-- Manual Impressum -->
+        <div class="card mb-4"><div class="card-header"><h5 class="mb-0"><i class="bi bi-person-vcard me-2"></i>Impressum (manuell)</h5></div>
+          <div class="card-body">
+            <div class="mb-2"><label class="form-label small text-muted">CEO / Gesch&auml;ftsf&uuml;hrer</label><input class="form-control form-control-sm" value="${esc(b.ceo_name||'')}" onchange="updateField('${b.place_id}','ceo_name',this.value)"></div>
+            <div class="mb-2"><label class="form-label small text-muted">Telefon (Impressum)</label><input class="form-control form-control-sm" value="${esc(b.phone_impressum||'')}" onchange="updateField('${b.place_id}','phone_impressum',this.value)"></div>
+            <div class="mb-2"><label class="form-label small text-muted">E-Mail</label><input class="form-control form-control-sm" value="${esc(b.email_impressum||'')}" onchange="updateField('${b.place_id}','email_impressum',this.value)"></div>
+            <div class="mb-0"><label class="form-label small text-muted">Impressum URL</label><input class="form-control form-control-sm" value="${esc(b.impressum_url||'')}" onchange="updateField('${b.place_id}','impressum_url',this.value)"></div>
+          </div>
+        </div>
+        <!-- Meta -->
+        <div class="card"><div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Meta</h5></div>
+          <ul class="list-group list-group-flush">
+            <li class="list-group-item"><small class="text-muted d-block">Place ID</small><code class="small">${esc(b.place_id)}</code></li>
+            <li class="list-group-item"><small class="text-muted d-block">Hinzugef&uuml;gt</small>${b.added_at||'—'}</li>
+          </ul>
+        </div>
+      </div>
+    </div>`;
+}
+
+function updateField(pid, field, val) {
+  const b = db.find(x => x.place_id === pid);
+  if (b) { b[field] = val; save(); }
+}
+
+// ═══════════════════════════════════════════════
+//  SCRAPE
+// ═══════════════════════════════════════════════
+function renderScrape() { updateKeyStatus(); }
+
+async function startScrape() {
+  if (jobRunning) return;
+  const googleKey = getKey('google');
+  if (!googleKey) { alert('Google API Key fehlt! Bitte unter "API-Keys" eintragen.'); go('settings'); return; }
+
+  const query = document.getElementById('inp-query').value.trim() || 'Immobilienmakler';
+  const maxPer = parseInt(document.getElementById('inp-max').value) || 20;
+  const citiesRaw = document.getElementById('inp-cities').value.trim();
+  const cities = citiesRaw ? citiesRaw.split(',').map(c => c.trim()).filter(Boolean) : DEFAULT_CITIES;
+
+  jobRunning = true;
+  document.getElementById('job-panel').classList.remove('d-none');
+  document.getElementById('scrape-form-card').classList.add('d-none');
+  const logEl = document.getElementById('job-log');
+  const logs = [];
+
+  function log(msg) {
+    const ts = new Date().toLocaleTimeString('de-DE');
+    logs.push(`[${ts}] ${msg}`);
+    if (logs.length > 150) logs.splice(0, logs.length - 150);
+    logEl.innerHTML = logs.map(l => '<div>' + esc(l) + '</div>').join('');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStep(s) { document.getElementById('job-step').textContent = s; }
+  function setProgress(n, total) {
+    const pct = total ? Math.round(n / total * 100) : 0;
+    document.getElementById('job-bar').style.width = pct + '%';
+    document.getElementById('job-bar-text').textContent = n + ' / ' + total;
+  }
+
+  try {
+    // Step 1: Load Google Maps API
+    setStep('Google Maps API laden...');
+    log('Lade Google Maps API...');
+    await loadMapsAPI(googleKey);
+    log('Google Maps API geladen.');
+
+    // Step 2: Search each city
+    setStep('Google Maps durchsuchen...');
+    let allPlaces = [];
+    const seenIds = new Set();
+
+    for (let i = 0; i < cities.length; i++) {
+      const city = cities[i];
+      setStep(`Suche in ${city}... (${i+1}/${cities.length})`);
+      log(`Suche "${query}" in ${city}...`);
+
+      try {
+        const results = await placesTextSearch(`${query} in ${city}, Deutschland`, maxPer);
+        let added = 0;
+        for (const p of results) {
+          if (!seenIds.has(p.place_id)) {
+            seenIds.add(p.place_id);
+            allPlaces.push(p);
+            added++;
+          }
+        }
+        log(`  ${added} neue Ergebnisse (${allPlaces.length} gesamt)`);
+      } catch (e) {
+        log(`  FEHLER in ${city}: ${e.message}`);
+      }
+      await sleep(1000);
+    }
+    log(`Insgesamt ${allPlaces.length} Unternehmen gefunden.`);
+
+    // Step 3: Get details + filter for 1-star reviews
+    setStep('Details & Bewertungen abrufen...');
+    log('Rufe Details ab und filtere nach 1-Stern-Bewertungen...');
+    let filtered = [];
+
+    for (let i = 0; i < allPlaces.length; i++) {
+      const p = allPlaces[i];
+      setProgress(i + 1, allPlaces.length);
+      setStep(`Details: ${p.name} (${i+1}/${allPlaces.length})`);
+
+      try {
+        const details = await placesGetDetails(p.place_id);
+        const reviews = (details.reviews || []).filter(r => r.rating === 1).map(r => r.text || '').filter(Boolean);
+
+        if (reviews.length > 0) {
+          filtered.push({
+            place_id: p.place_id,
+            company_name: details.name || p.name,
+            address: details.formatted_address || p.formatted_address || '',
+            phone: details.international_phone_number || details.formatted_phone_number || '',
+            website: details.website || '',
+            rating: details.rating || p.rating || 0,
+            reviews_count: details.user_ratings_total || 0,
+            one_star_reviews: reviews,
+            ai_analysis: '',
+            ceo_name: '', phone_impressum: '', email_impressum: '', impressum_url: '',
+            added_at: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          });
+          log(`  ${p.name}: ${reviews.length} 1-Stern-Bewertung(en) → behalten`);
+        }
+      } catch (e) {
+        log(`  FEHLER bei ${p.name}: ${e.message}`);
+      }
+      await sleep(300);
+    }
+    log(`${filtered.length} Unternehmen mit 1-Stern-Bewertungen.`);
+
+    // Step 4: AI analysis
+    const openaiKey = getKey('openai');
+    if (openaiKey && filtered.length) {
+      setStep('KI-Analyse mit ChatGPT...');
+      log('Starte KI-Analyse...');
+
+      for (let i = 0; i < filtered.length; i++) {
+        const b = filtered[i];
+        setProgress(i + 1, filtered.length);
+        setStep(`KI-Analyse: ${b.company_name} (${i+1}/${filtered.length})`);
+        log(`  Analysiere ${b.company_name}...`);
+
+        try {
+          b.ai_analysis = await analyzeWithChatGPT(openaiKey, b);
+        } catch (e) {
+          b.ai_analysis = '[Analyse fehlgeschlagen]';
+          log(`    FEHLER: ${e.message}`);
+        }
+        await sleep(500);
+      }
+      log('KI-Analyse abgeschlossen.');
+    } else if (!openaiKey) {
+      log('Kein OpenAI Key → KI-Analyse übersprungen.');
+    }
+
+    // Step 5: Save to DB
+    for (const b of filtered) {
+      const existing = db.findIndex(x => x.place_id === b.place_id);
+      if (existing >= 0) db[existing] = { ...db[existing], ...b };
+      else db.push(b);
+    }
+    save();
+
+    setStep('Fertig!');
+    setProgress(filtered.length, filtered.length);
+    log(`Job abgeschlossen! ${filtered.length} Unternehmen gespeichert.`);
+    document.getElementById('job-title').textContent = 'Job abgeschlossen!';
+
+  } catch (e) {
+    log('FATALER FEHLER: ' + e.message);
+    setStep('Fehler: ' + e.message);
+  } finally {
+    jobRunning = false;
+    setTimeout(() => {
+      document.getElementById('job-panel').classList.add('d-none');
+      document.getElementById('scrape-form-card').classList.remove('d-none');
+    }, 5000);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  GOOGLE MAPS API
+// ═══════════════════════════════════════════════
+function loadMapsAPI(key) {
+  return new Promise((resolve, reject) => {
+    if (mapsLoaded && placesService) return resolve();
+    window._gmapsReady = () => {
+      const div = document.createElement('div');
+      placesService = new google.maps.places.PlacesService(div);
+      mapsLoaded = true;
+      resolve();
+    };
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&callback=_gmapsReady`;
+    s.onerror = () => reject(new Error('Google Maps API konnte nicht geladen werden'));
+    document.head.appendChild(s);
+  });
+}
+
+function placesTextSearch(query, maxResults) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    placesService.textSearch({ query, region: 'de' }, function handler(results, status, pagination) {
+      if (status === google.maps.places.PlacesServiceStatus.OK) {
+        all.push(...results);
+        if (pagination && pagination.hasNextPage && all.length < maxResults) {
+          setTimeout(() => pagination.nextPage(), 2000);
+        } else {
+          resolve(all.slice(0, maxResults));
+        }
+      } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+        resolve([]);
+      } else {
+        reject(new Error('Places API: ' + status));
+      }
+    });
+  });
+}
+
+function placesGetDetails(placeId) {
+  return new Promise((resolve, reject) => {
+    placesService.getDetails({
+      placeId,
+      fields: ['name','formatted_address','formatted_phone_number','international_phone_number','website','rating','user_ratings_total','reviews']
+    }, (result, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK) resolve(result);
+      else reject(new Error('Details API: ' + status));
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  OPENAI API
+// ═══════════════════════════════════════════════
+async function analyzeWithChatGPT(apiKey, biz) {
+  const reviewTexts = (biz.one_star_reviews || []).join('\n---\n');
+  const prompt = `Analysiere dieses deutsche Immobilienunternehmen anhand seiner 1-Stern-Google-Bewertungen. Antworte auf Deutsch in 2-3 Sätzen.
+
+Unternehmen: ${biz.company_name}
+Adresse: ${biz.address}
+Bewertung: ${biz.rating}/5 (${biz.reviews_count} Bewertungen)
+Website: ${biz.website || 'keine'}
+
+1-Stern-Bewertungen:
+${reviewTexts}
+
+Fasse zusammen: Was für ein Unternehmen ist das, und was sind die Hauptkritikpunkte laut den Bewertungen?`;
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 400,
+      messages: [
+        { role: 'system', content: 'Du bist ein Business-Analyst für deutsche Immobilienunternehmen. Antworte kurz und prägnant auf Deutsch.' },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+  if (!resp.ok) throw new Error('OpenAI API: ' + resp.status);
+  const data = await resp.json();
+  return data.choices[0].message.content.trim();
+}
+
+// ═══════════════════════════════════════════════
+//  CSV EXPORT
+// ═══════════════════════════════════════════════
+function exportCSV() {
+  if (!db.length) { alert('Keine Daten zum Exportieren.'); return; }
+  const headers = ['Company Name','Phone','Website','Rating','Total Reviews','1-Star Reviews','AI Analysis','CEO','Phone (Impressum)','Email (Impressum)','Impressum URL'];
+  const rows = db.map(b => [
+    b.company_name, b.phone||'', b.website||'', b.rating||'', b.reviews_count||'',
+    (b.one_star_reviews||[]).join(' | '), b.ai_analysis||'',
+    b.ceo_name||'', b.phone_impressum||'', b.email_impressum||'', b.impressum_url||''
+  ]);
+  let csv = [headers, ...rows].map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'immobilienmakler_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function starsHtml(rating, full) {
+  const n = Math.round(rating || 0);
+  let h = '';
+  for (let i = 0; i < n; i++) h += '<i class="bi bi-star-fill stars"></i>';
+  if (full) for (let i = n; i < 5; i++) h += '<i class="bi bi-star stars"></i>';
+  return h;
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+updateKeyStatus();
+if (!getKey('google')) go('settings');
+else go('dashboard');
+</script>
+</body>
+</html>
