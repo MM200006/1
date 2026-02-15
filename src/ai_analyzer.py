@@ -1,22 +1,25 @@
 """
-AI-powered company analysis using Anthropic Claude API.
+AI-powered company analysis using OpenAI ChatGPT.
 
 Takes scraped website text and produces a concise analysis of what the
 real estate company does and what it specializes in.
 """
 
 import logging
-import anthropic
-from src.config import ANTHROPIC_API_KEY
+from openai import OpenAI
+from src.config import OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_PROMPT = """\
-Du bist ein Business-Analyst. Analysiere den folgenden Website-Text eines \
-deutschen Immobilienunternehmens und erstelle eine kurze Zusammenfassung \
-(maximal 3-4 Sätze) auf Deutsch.
+SYSTEM_PROMPT = """\
+Du bist ein Business-Analyst, der deutsche Immobilienunternehmen analysiert. \
+Antworte immer auf Deutsch, kurz und prägnant (maximal 3-4 Sätze)."""
 
-Beantworte dabei folgende Fragen:
+ANALYSIS_PROMPT = """\
+Analysiere den folgenden Website-Text eines deutschen Immobilienunternehmens \
+und erstelle eine kurze Zusammenfassung (maximal 3-4 Sätze).
+
+Beantworte dabei:
 1. Was macht das Unternehmen genau? (z.B. Vermietung, Verkauf, Hausverwaltung, \
 Projektentwicklung, Gewerbeimmobilien, Wohnimmobilien)
 2. Auf welche Bereiche / Regionen ist es spezialisiert?
@@ -26,13 +29,12 @@ Antworte NUR mit der Zusammenfassung, ohne Einleitung oder Überschriften.
 
 --- WEBSITE TEXT ---
 {website_text}
----
-"""
+---"""
 
 
 def analyze_company(website_text: str, company_name: str = "") -> str:
     """
-    Use Claude to analyze what a real estate company does and specializes in.
+    Use ChatGPT to analyze what a real estate company does and specializes in.
 
     Args:
         website_text: The scraped text content from the company website.
@@ -41,8 +43,8 @@ def analyze_company(website_text: str, company_name: str = "") -> str:
     Returns:
         A concise AI-generated analysis string.
     """
-    if not ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY not set. Skipping AI analysis.")
+    if not OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY not set. Skipping AI analysis.")
         return "[AI analysis skipped - no API key]"
 
     if not website_text or len(website_text.strip()) < 50:
@@ -56,22 +58,20 @@ def analyze_company(website_text: str, company_name: str = "") -> str:
     prompt = ANALYSIS_PROMPT.format(website_text=website_text)
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=500,
             messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
         )
 
-        analysis = message.content[0].text.strip()
+        analysis = response.choices[0].message.content.strip()
         logger.info("AI analysis for '%s': %s", company_name, analysis[:80])
         return analysis
 
-    except anthropic.APIError:
-        logger.exception("Anthropic API error during analysis for '%s'", company_name)
-        return "[AI analysis failed - API error]"
     except Exception:
-        logger.exception("Unexpected error during AI analysis for '%s'", company_name)
-        return "[AI analysis failed]"
+        logger.exception("OpenAI API error during analysis for '%s'", company_name)
+        return "[AI analysis failed - API error]"

@@ -1,6 +1,6 @@
 # German Real Estate Agent Scraper & Analyzer
 
-Automated pipeline that discovers German real estate agents (Immobilienmakler) via Google Maps, filters for those with 1-star reviews, scrapes their websites for business details, uses AI to analyze their specialization, and exports everything to Google Sheets.
+Automated pipeline that discovers German real estate agents (Immobilienmakler) via Google Maps, filters for those with 1-star reviews, scrapes their websites for business details, uses ChatGPT to analyze their specialization, and exports everything to Google Sheets.
 
 ## What It Collects
 
@@ -14,7 +14,7 @@ For each real estate agent:
 | Google Maps Rating | Google Maps |
 | Total Reviews | Google Maps |
 | 1-Star Review Text | Google Maps Reviews |
-| AI Company Analysis | Website → Claude AI |
+| AI Company Analysis | Website → ChatGPT |
 | CEO / Geschäftsführer | Website Impressum |
 | Phone (Impressum) | Website Impressum |
 | Email (Impressum) | Website Impressum |
@@ -41,16 +41,23 @@ Copy the example env file and fill in your keys:
 cp .env.example .env
 ```
 
-#### SerpAPI (for Google Maps search)
+Then edit `.env` and add your keys.
 
-1. Sign up at https://serpapi.com/
-2. Get your API key from the dashboard
-3. Add to `.env` as `SERPAPI_KEY`
+#### Google API Key (for Places API / Maps search)
 
-#### Anthropic (for AI analysis)
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Create an API key (or use an existing one)
+3. Enable the **Places API** in your project ([Enable here](https://console.cloud.google.com/apis/library/places-backend.googleapis.com))
+4. Add to `.env` as `GOOGLE_API_KEY`
 
-1. Get an API key at https://console.anthropic.com/
-2. Add to `.env` as `ANTHROPIC_API_KEY`
+> **Note:** The Places API has a free $200/month credit. Text Search costs $32 per 1000 requests, Place Details $17 per 1000 requests.
+
+#### OpenAI API Key (for ChatGPT analysis)
+
+1. Get an API key at https://platform.openai.com/api-keys
+2. Add to `.env` as `OPENAI_API_KEY`
+
+> Uses `gpt-4o-mini` by default (very affordable: ~$0.15 per 1M input tokens).
 
 #### Google Sheets (for spreadsheet export)
 
@@ -121,23 +128,23 @@ rm output/checkpoint.json
 ├── main.py                  # CLI entry point & pipeline orchestrator
 ├── src/
 │   ├── config.py            # Configuration & environment variables
-│   ├── maps_scraper.py      # Google Maps search & review fetching
+│   ├── maps_scraper.py      # Google Places API search & review fetching
 │   ├── website_scraper.py   # Website & Impressum scraping
-│   ├── ai_analyzer.py       # Claude AI company analysis
+│   ├── ai_analyzer.py       # ChatGPT company analysis
 │   └── sheets_exporter.py   # Google Sheets & CSV export
 ├── requirements.txt
 ├── .env.example
 └── credentials/             # Google service account JSON (gitignored)
 ```
 
-## Rate Limiting & Politeness
+## API Costs
 
-- Polite delays (2-5 seconds) between website requests
-- Delays between Google Maps API calls
-- SerpAPI handles Google Maps rate limiting on their end
-
-## Costs
-
-- **SerpAPI**: Each Google Maps search and each reviews lookup counts as one search. Free tier includes 100 searches/month.
-- **Anthropic**: AI analysis uses Claude Sonnet with ~500 output tokens per company. Cost is minimal.
+- **Google Places API**: Text Search = $32/1K requests, Place Details = $17/1K requests. Google gives a free $200/month credit.
+- **OpenAI**: gpt-4o-mini at ~$0.15/1M input tokens + $0.60/1M output tokens. Very low cost per company.
 - **Google Sheets API**: Free within standard quotas.
+
+## Rate Limiting
+
+- 2-5 second polite delays between website requests
+- 2 second delays between Google API calls
+- Pagination pauses for Google next_page_token
