@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Makler Scraper{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">
+    <i class="bi bi-speedometer2 me-2"></i>Dashboard
+</h2>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card p-4 text-center">
+            <div class="fs-1 fw-bold text-primary">{{ stats.total }}</div>
+            <div class="text-muted">Unternehmen gesamt</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card p-4 text-center">
+            <div class="fs-1 fw-bold text-danger">{{ stats.with_reviews }}</div>
+            <div class="text-muted">Mit 1-Stern-Bewertungen</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card p-4 text-center">
+            <div class="fs-1 fw-bold text-success">{{ stats.with_website }}</div>
+            <div class="text-muted">Mit Website</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card p-4 text-center">
+            <div class="fs-1 fw-bold text-warning">{{ stats.avg_rating }}</div>
+            <div class="text-muted">
+                <i class="bi bi-star-fill rating-stars"></i> Durchschnitt
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Job Status -->
+{% if current_job.running %}
+<div class="card border-primary mb-4">
+    <div class="card-header bg-primary text-white d-flex align-items-center">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        <strong>Scraping-Job läuft...</strong>
+    </div>
+    <div class="card-body">
+        <p class="mb-2">{{ current_job.step }}</p>
+        {% if current_job.total > 0 %}
+        <div class="progress mb-2" style="height: 24px;">
+            {% set pct = (current_job.progress / current_job.total * 100)|round|int %}
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 style="width: {{ pct }}%">
+                {{ current_job.progress }} / {{ current_job.total }}
+            </div>
+        </div>
+        {% endif %}
+        <a href="{{ url_for('scrape') }}" class="btn btn-sm btn-outline-primary">Details anzeigen</a>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Recent Results -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>Letzte Ergebnisse
+                </h5>
+                <a href="{{ url_for('results') }}" class="btn btn-sm btn-outline-primary">Alle anzeigen</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Unternehmen</th>
+                                <th>Bewertung</th>
+                                <th>CEO</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for biz in recent %}
+                            <tr>
+                                <td>
+                                    <strong>{{ biz.company_name }}</strong>
+                                    <br><small class="text-muted">{{ biz.address[:50] }}{% if biz.address|length > 50 %}...{% endif %}</small>
+                                </td>
+                                <td>
+                                    <span class="rating-stars">
+                                        {% for i in range(biz.rating|int) %}<i class="bi bi-star-fill"></i>{% endfor %}
+                                    </span>
+                                    <small>({{ biz.reviews_count }})</small>
+                                </td>
+                                <td>{{ biz.ceo_name or '—' }}</td>
+                                <td>
+                                    <a href="{{ url_for('business_detail', business_id=biz.id) }}"
+                                       class="btn btn-sm btn-outline-light">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    Noch keine Daten vorhanden.
+                    <a href="{{ url_for('scrape') }}">Jetzt Scraping starten</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Jobs -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Letzte Jobs</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if jobs %}
+                <ul class="list-group list-group-flush">
+                    {% for job in jobs %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ job.query }}</strong>
+                            {% if job.status == 'completed' %}
+                            <span class="badge bg-success">Fertig</span>
+                            {% elif job.status == 'running' %}
+                            <span class="badge bg-primary">Läuft</span>
+                            {% elif job.status == 'failed' %}
+                            <span class="badge bg-danger">Fehler</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ job.status }}</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">
+                            {{ job.total_processed }}/{{ job.total_found }} verarbeitet
+                            &middot; {{ job.started_at[:16] }}
+                        </small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-center text-muted">Keine Jobs bisher.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

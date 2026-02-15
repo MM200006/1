@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ biz.company_name }} - Makler Scraper{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('results') }}">Ergebnisse</a></li>
+        <li class="breadcrumb-item active">{{ biz.company_name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h2 class="mb-1">{{ biz.company_name }}</h2>
+        <p class="text-muted mb-0">
+            <i class="bi bi-geo-alt me-1"></i>{{ biz.address or 'Keine Adresse' }}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if biz.website %}
+        <a href="{{ biz.website }}" target="_blank" rel="noopener"
+           class="btn btn-outline-primary">
+            <i class="bi bi-globe me-1"></i>Website
+        </a>
+        {% endif %}
+        <form method="post" action="{{ url_for('delete_business', business_id=biz.id) }}"
+              onsubmit="return confirm('Eintrag wirklich löschen?')">
+            <button class="btn btn-outline-danger">
+                <i class="bi bi-trash me-1"></i>Löschen
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left column: Info cards -->
+    <div class="col-lg-8">
+        <!-- Google Maps Info -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-google me-2"></i>Google Maps Daten</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-sm-4">
+                        <label class="form-label text-muted small">Bewertung</label>
+                        <div>
+                            <span class="rating-stars fs-5">
+                                {% for i in range(biz.rating|int) %}<i class="bi bi-star-fill"></i>{% endfor %}
+                                {% for i in range(5 - biz.rating|int) %}<i class="bi bi-star"></i>{% endfor %}
+                            </span>
+                            <span class="ms-2">{{ biz.rating }} / 5</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label text-muted small">Bewertungen</label>
+                        <div class="fs-5">{{ biz.reviews_count }}</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label text-muted small">Telefon (Maps)</label>
+                        <div>
+                            {% if biz.phone_maps %}
+                            <a href="tel:{{ biz.phone_maps }}">{{ biz.phone_maps }}</a>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Analysis -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-robot me-2"></i>KI-Analyse (ChatGPT)</h5>
+            </div>
+            <div class="card-body">
+                {% if biz.ai_analysis %}
+                <p class="mb-0">{{ biz.ai_analysis }}</p>
+                {% else %}
+                <p class="text-muted mb-0">Keine AI-Analyse vorhanden.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 1-Star Reviews -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between">
+                <h5 class="mb-0"><i class="bi bi-star me-2 text-danger"></i>1-Stern-Bewertungen</h5>
+                <span class="badge bg-danger">{{ reviews|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if reviews %}
+                {% for review in reviews %}
+                <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
+                    <div class="rating-stars mb-1">
+                        <i class="bi bi-star-fill text-danger"></i>
+                    </div>
+                    <p class="mb-0">{{ review }}</p>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted mb-0">Keine 1-Stern-Bewertungen gespeichert.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: Impressum + Contact -->
+    <div class="col-lg-4">
+        <!-- Contact Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-vcard me-2"></i>Kontakt (Impressum)</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <small class="text-muted d-block">CEO / Geschäftsführer</small>
+                    <strong>{{ biz.ceo_name or '—' }}</strong>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted d-block">Telefon</small>
+                    {% if biz.phone_impressum %}
+                    <a href="tel:{{ biz.phone_impressum }}">{{ biz.phone_impressum }}</a>
+                    {% else %}—{% endif %}
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted d-block">E-Mail</small>
+                    {% if biz.email_impressum %}
+                    <a href="mailto:{{ biz.email_impressum }}">{{ biz.email_impressum }}</a>
+                    {% else %}—{% endif %}
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted d-block">Impressum URL</small>
+                    {% if biz.impressum_url %}
+                    <a href="{{ biz.impressum_url }}" target="_blank" rel="noopener" class="text-break">
+                        {{ biz.impressum_url[:60] }}{% if biz.impressum_url|length > 60 %}...{% endif %}
+                    </a>
+                    {% else %}—{% endif %}
+                </li>
+            </ul>
+        </div>
+
+        <!-- Website Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-globe me-2"></i>Website</h5>
+            </div>
+            <div class="card-body">
+                {% if biz.website %}
+                <a href="{{ biz.website }}" target="_blank" rel="noopener" class="text-break">
+                    {{ biz.website }}
+                </a>
+                {% else %}
+                <span class="text-muted">Keine Website vorhanden</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Meta -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Meta</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <small class="text-muted d-block">Place ID</small>
+                    <code class="small">{{ biz.place_id }}</code>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted d-block">Erstellt am</small>
+                    {{ biz.created_at[:16] }}
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted d-block">Aktualisiert am</small>
+                    {{ biz.updated_at[:16] }}
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

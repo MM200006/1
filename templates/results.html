@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Ergebnisse - Makler Scraper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-table me-2"></i>Ergebnisse</h2>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('export_csv') }}" class="btn btn-outline-success">
+            <i class="bi bi-download me-1"></i>CSV Export
+        </a>
+    </div>
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-6">
+                <label class="form-label">Suche</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" name="search"
+                           value="{{ search }}" placeholder="Firmenname oder Stadt...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Sortierung</label>
+                <select class="form-select" name="sort">
+                    <option value="updated_at" {% if sort_by == 'updated_at' %}selected{% endif %}>Zuletzt aktualisiert</option>
+                    <option value="company_name" {% if sort_by == 'company_name' %}selected{% endif %}>Name</option>
+                    <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>Bewertung</option>
+                    <option value="reviews_count" {% if sort_by == 'reviews_count' %}selected{% endif %}>Anzahl Bewertungen</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Reihenfolge</label>
+                <select class="form-select" name="order">
+                    <option value="desc" {% if order == 'desc' %}selected{% endif %}>Absteigend</option>
+                    <option value="asc" {% if order == 'asc' %}selected{% endif %}>Aufsteigend</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-funnel"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results count -->
+<p class="text-muted mb-3">{{ businesses|length }} Ergebnis{{ 'se' if businesses|length != 1 else '' }}</p>
+
+<!-- Results Table -->
+{% if businesses %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Unternehmen</th>
+                    <th>Bewertung</th>
+                    <th>Telefon</th>
+                    <th>CEO</th>
+                    <th>E-Mail</th>
+                    <th>Website</th>
+                    <th class="text-end">Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for biz in businesses %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('business_detail', business_id=biz.id) }}"
+                           class="text-decoration-none fw-bold">
+                            {{ biz.company_name }}
+                        </a>
+                        <br><small class="text-muted">{{ biz.address[:60] }}{% if biz.address|length > 60 %}...{% endif %}</small>
+                    </td>
+                    <td class="text-nowrap">
+                        <span class="rating-stars">
+                            {% for i in range(biz.rating|int) %}<i class="bi bi-star-fill"></i>{% endfor %}
+                        </span>
+                        <br><small>{{ biz.rating }} ({{ biz.reviews_count }})</small>
+                    </td>
+                    <td class="text-nowrap">
+                        {% if biz.phone_maps %}
+                        <small>{{ biz.phone_maps }}</small>
+                        {% elif biz.phone_impressum %}
+                        <small>{{ biz.phone_impressum }}</small>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ biz.ceo_name or '—' }}</td>
+                    <td>
+                        {% if biz.email_impressum %}
+                        <a href="mailto:{{ biz.email_impressum }}" class="text-decoration-none">
+                            <small>{{ biz.email_impressum }}</small>
+                        </a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if biz.website %}
+                        <a href="{{ biz.website }}" target="_blank" rel="noopener"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{{ url_for('business_detail', business_id=biz.id) }}"
+                           class="btn btn-sm btn-outline-primary me-1" title="Details">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <form method="post" action="{{ url_for('delete_business', business_id=biz.id) }}"
+                              class="d-inline" onsubmit="return confirm('Wirklich löschen?')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Löschen">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-inbox fs-1 d-block mb-3 text-muted"></i>
+    <h5 class="text-muted">Keine Ergebnisse{% if search %} für "{{ search }}"{% endif %}</h5>
+    {% if not search %}
+    <a href="{{ url_for('scrape') }}" class="btn btn-primary mt-2">
+        <i class="bi bi-search me-1"></i>Scraping starten
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
