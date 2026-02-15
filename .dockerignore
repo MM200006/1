@@ -1,0 +1,12 @@
+# Docker
+data/
+.env
+credentials/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.git/
+*.egg-info/
+output/
+scraper.log
